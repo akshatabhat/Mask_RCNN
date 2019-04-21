@@ -101,6 +101,12 @@ class IcgDataset(utils.Dataset):
 		for (dirpath, dirnames, filenames) in os.walk(images_dir):
 			files.extend(filenames)
 
+		# Add classes
+		index = 0
+		for class_val in RGB_classes.values():
+			self.add_class("icg", index, class_val)
+			index += 1
+
 		# Add images
 		for f in files:
 			img_id = str(f[:-4])
@@ -109,12 +115,6 @@ class IcgDataset(utils.Dataset):
 				path=os.path.join(images_dir, img_id + '.jpg'),
 				mask_image_path=os.path.join(dataset_dir, 'images_seg', img_id +'.png'))
 		
-		# Add classes
-		index = 0
-		for class_val in RGB_classes.values():
-			self.add_class("icg", index, class_val)
-			index += 1
-
 
 	def load_mask(self, image_id):
 		"""Generate instance masks for an image.
@@ -145,16 +145,18 @@ class IcgDataset(utils.Dataset):
 		for region in properties:
 			centroid = np.rint(region.centroid).astype(np.int32)
 			RGB_key = tuple(color_image[centroid[0], centroid[1]])
-			print(RGB_key)
 			if RGB_key not in RGB_classes:
-				continue # we don't care about this label
-			class_ids.append(RGB_classes[RGB_key])
+				class_name = 'BG' # we don't care about this label
+			else:
+				class_name = RGB_classes[RGB_key]
+			for ele in self.class_info:
+				if ele['name'] == class_name:
+					class_ids.append(ele['id'])
+					break
 			mask[region.coords[:,0], region.coords[:,1], instance] = 1
 			instance += 1
-
 		# Return mask, and array of class IDs of each instance. Since we have
 		# one class ID only, we return an array of 1s
-		print(class_ids)
 		return mask.astype(np.bool), np.array(class_ids, dtype=np.int32)
 
 	def image_reference(self, image_id):
