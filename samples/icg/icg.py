@@ -20,14 +20,18 @@ Usage: import the module (see Jupyter notebooks for examples), or run from
 	# Train a new model starting from ImageNet weights
 	python3 icg.py train --dataset=/path/to/icg/dataset --weights=imagenet
 
-	# evaluate
+	# evaluate using specific weights
 	python3 icg.py val --weights=/path/to/weights/file.h5 --image=<URL or path to file>
+
+	# evaluate using specific weights
+	python3 icg.py val --weights=last --image=<URL or path to file>
 """
 
 import os
 import sys
 import json
 import datetime
+import random
 import numpy as np
 import skimage.draw
 from skimage.io import imread
@@ -42,6 +46,17 @@ ROOT_DIR = os.path.abspath("../../")
 sys.path.append(ROOT_DIR)  # To find local version of the library
 from mrcnn.config import Config
 from mrcnn import model as modellib, utils
+from mrcnn.model import log
+from mrcnn import visualize
+
+# Handling NSInvalidArgumentException on OSX
+from sys import platform as sys_pf
+print(sys_pf)
+if sys_pf == 'darwin':
+    import matplotlib
+    matplotlib.use("TkAgg")
+
+
 
 # Path to trained weights file
 COCO_WEIGHTS_PATH = os.path.join(ROOT_DIR, "mask_rcnn_coco.h5")
@@ -167,6 +182,9 @@ class IcgDataset(utils.Dataset):
 		else:
 			super(self.__class__, self).image_reference(image_id)
 
+############################################################
+#  Training
+############################################################
 
 def train(model):
 	"""Train the model."""
@@ -192,10 +210,51 @@ def train(model):
 				epochs=30,
 				layers='heads')
 
+############################################################
+#  Evaluate
+############################################################
 
-############################################################
-#  Training
-############################################################
+def evaluate(model, inference_config):
+	dataset_val = IcgDataset()
+	dataset_val.load_icg(args.dataset, "val")
+	dataset_val.prepare()
+
+	image_id = random.choice(dataset_val.image_ids)
+
+	original_image, image_meta, gt_class_id, gt_bbox, gt_mask = modellib.load_image_gt(dataset_val, inference_config, image_id, use_mini_mask=False)
+	log("original_image", original_image)
+	log("image_meta", image_meta)
+	log("gt_class_id", gt_class_id)
+	log("gt_bbox", gt_bbox)
+	log("gt_mask", gt_mask)
+	visualize.display_instances(original_image, gt_bbox, gt_mask, gt_class_id, dataset_val.class_names, show_bbox=False, show_mask=False, title="Predictions")
+	results = model.detect([original_image], verbose=1)
+
+
+	r = results[0]
+	visualize.display_instances(original_image, r['rois'], r['masks'], r['class_ids'], dataset_val.class_names, r['scores'], ax=get_ax())
+
+	
+	image_ids = np.random.choice(dataset_val.image_ids, 10)
+	APs = []
+	for image_id in image_ids:
+		# Load image and ground truth data
+		image, image_meta, gt_class_id, gt_bbox, gt_mask =\
+			modellib.load_image_gt(dataset_val, inference_config,
+								   image_id, use_mini_mask=False)
+		molded_images = np.expand_dims(modellib.mold_image(image, inference_config), 0)
+		# Run object detection
+		results = model.detect([image], verbose=0)
+		r = results[0]
+		# Compute AP
+		AP, precisions, recalls, overlaps =\
+			utils.compute_ap(gt_bbox, gt_class_id, gt_mask,
+							 r["rois"], r["class_ids"], r["scores"], r['masks'])
+		APs.append(AP)
+	
+	print("mAP: ", np.mean(APs))
+	
+
 
 if __name__ == '__main__':
 	import argparse
@@ -216,11 +275,6 @@ if __name__ == '__main__':
 						default=DEFAULT_LOGS_DIR,
 						metavar="/path/to/logs/",
 						help='Logs and checkpoints directory (default=logs/)')
-	'''
-	parser.add_argument('--image', required=False,
-						metavar="path or URL to image",
-						help='Image to perform object detection on')
-	'''
 	args = parser.parse_args()
 
 	# Validate arguments
@@ -283,5 +337,5 @@ if __name__ == '__main__':
 	# Train or evaluate
 	if args.command == "train":
 		train(model)
-	elif args.command == "evaluate":
-		pass
+	elif args.command == "val":
+		evaluate(model, config)
