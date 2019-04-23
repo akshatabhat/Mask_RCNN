@@ -1,10 +1,10 @@
 # MASK R-CNN for Object Detection on Icg Dataset
 The dataset should have the following folder structure :-
 icg_dataset/
-	-images/
-		-train/
-		-val/
-	-images_seg/
+	images/
+		train/
+		val/
+	images_seg/
 
 
 To modify configurationg of the model, check IcgConfig in icg.py
