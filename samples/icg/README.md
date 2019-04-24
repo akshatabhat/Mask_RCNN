@@ -14,7 +14,7 @@ To run model training, use the following command
 python3 icg.py train --dataset /path/to/icg_dataset --weights "coco" --logs logs/
 
 To run model evaluation, use the following command
-python3 icg.py train --dataset /path/to/icg_dataset --weights "coco" --logs logs/
+python3 icg.py val --dataset /path/to/icg_dataset --weights "coco" --logs logs/
 
 
 
